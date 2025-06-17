@@ -8,12 +8,8 @@
 #include <string.h>
 #include <time.h>
 
-typedef enum {
-    ROTATION_0 = 0,
-    ROTATION_90 = 1,
-    ROTATION_180 = 2,
-    ROTATION_270 = 3
-} Rotation;
+#include "rotation.c"
+#include "draw.c"
 
 typedef struct {
     SDL_FRect texture_rect;  // Coordinates in texture space
@@ -100,69 +96,6 @@ char* get_base_filename(const char* path) {
     return base;
 }
 
-
-SDL_Surface* create_rotated_surface(SDL_Surface* original, Rotation rotation) {
-    if (rotation == ROTATION_0) {
-        return original;
-    }
-
-    int w = original->w, h = original->h;
-    int new_w = (rotation == ROTATION_90 || rotation == ROTATION_270) ? h : w;
-    int new_h = (rotation == ROTATION_90 || rotation == ROTATION_270) ? w : h;
-
-    SDL_Surface* rotated = SDL_CreateSurface(new_w, new_h, original->format);
-    if (!rotated) {
-        return NULL;
-    }
-
-    SDL_LockSurface(original);
-    SDL_LockSurface(rotated);
-
-    int bpp       = SDL_BYTESPERPIXEL(original->format);
-    int src_pitch = original->pitch;
-    int dst_pitch = rotated->pitch;
-    Uint8 *src    = (Uint8*)original->pixels;
-    Uint8 *dst    = (Uint8*)rotated->pixels;
-
-    // Проходим по dst-пикселям подряд
-    for (int ny = 0; ny < new_h; ++ny) {
-        Uint8 *dst_row = dst + ny * dst_pitch;
-        for (int nx = 0; nx < new_w; ++nx) {
-            int sx, sy;
-            switch (rotation) {
-                case ROTATION_90:
-                    // dst(nx,ny) = src(w-1-ny, nx)
-                    sx = ny;
-                    sy = h - 1 - nx;
-                    break;
-                case ROTATION_180:
-                    // dst(nx,ny) = src(w-1-nx, h-1-ny)
-                    sx = w - 1 - nx;
-                    sy = h - 1 - ny;
-                    break;
-                case ROTATION_270:
-                    // dst(nx,ny) = src(h-1-ny, ?)
-                    sx = w - 1 - ny;
-                    sy = nx;
-                    break;
-                default:
-                    sx = nx; sy = ny;
-            }
-
-            // src-пиксель
-            Uint8 *src_px = src + sy * src_pitch + sx * bpp;
-            // dst-пиксель (запись подряд!)
-            Uint8 *dst_px = dst_row + nx * bpp;
-            memcpy(dst_px, src_px, bpp);
-        }
-    }
-
-    SDL_UnlockSurface(rotated);
-    SDL_UnlockSurface(original);
-    return rotated;
-}
-
-
 void save_selections(SelectionState* state, SDL_Surface* image_surface, const char* base_name, int* total_cropped) {
     for (int i = 0; i < state->count; i++) {
         if (!state->selections[i].active) continue;
@@ -211,54 +144,6 @@ void save_selections(SelectionState* state, SDL_Surface* image_surface, const ch
         }
         SDL_DestroySurface(cropped);
     }
-}
-
-void draw_rotation_icon(SDL_Renderer* renderer, SDL_FRect* rect, Rotation rotation) {
-    float center_x = rect->x + rect->w / 2;
-    float center_y = rect->y + rect->h / 2;
-    float size = fminf(rect->w, rect->h) * 0.1f;
-    if (size < 10) size = 10;
-    if (size > 30) size = 30;
-    
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 200);
-    
-    // Draw rotation indicator based on rotation
-    float points[8];
-    switch (rotation) {
-        case ROTATION_0:
-            // Arrow pointing up
-            points[0] = center_x; points[1] = center_y - size;
-            points[2] = center_x - size/2; points[3] = center_y;
-            points[4] = center_x + size/2; points[5] = center_y;
-            points[6] = center_x; points[7] = center_y - size;
-            break;
-        case ROTATION_90:
-            // Arrow pointing right
-            points[0] = center_x + size; points[1] = center_y;
-            points[2] = center_x; points[3] = center_y - size/2;
-            points[4] = center_x; points[5] = center_y + size/2;
-            points[6] = center_x + size; points[7] = center_y;
-            break;
-        case ROTATION_180:
-            // Arrow pointing down
-            points[0] = center_x; points[1] = center_y + size;
-            points[2] = center_x - size/2; points[3] = center_y;
-            points[4] = center_x + size/2; points[5] = center_y;
-            points[6] = center_x; points[7] = center_y + size;
-            break;
-        case ROTATION_270:
-            // Arrow pointing left
-            points[0] = center_x - size; points[1] = center_y;
-            points[2] = center_x; points[3] = center_y - size/2;
-            points[4] = center_x; points[5] = center_y + size/2;
-            points[6] = center_x - size; points[7] = center_y;
-            break;
-    }
-    
-    // Draw arrow lines
-    SDL_RenderLine(renderer, points[0], points[1], points[2], points[3]);
-    SDL_RenderLine(renderer, points[2], points[3], points[4], points[5]);
-    SDL_RenderLine(renderer, points[4], points[5], points[6], points[7]);
 }
 
 int find_selection_at_point(SelectionState* state, float x, float y, float tex_display_x, float tex_display_y, float scale) {

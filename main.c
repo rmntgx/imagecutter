@@ -3,6 +3,7 @@
 #include <SDL3/SDL_mouse.h>
 #include <SDL3/SDL_rect.h>
 #include <SDL3/SDL_render.h>
+#include <SDL3/SDL_stdinc.h>
 #include <SDL3_image/SDL_image.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -263,7 +264,12 @@ int main(int argc, char* argv[]) {
 - 'P' key for previous image\n\
 - 'ESC' to quit\n\n");
 
+	const int targetFPS = 60;
+	const Uint32 frameDelay = 1000 / targetFPS;
+	bool redraw = true;
+
 	while (running) {
+		Uint32 frameStart = SDL_GetTicks(); // Framerate limit
 		SDL_Event event;
 		while (SDL_PollEvent(&event)) {
 			switch (event.type) {
@@ -279,11 +285,13 @@ int main(int argc, char* argv[]) {
 						case SDLK_C:
 							clear_selections(&selection_state);
 							printf("All selections cleared.\n");
+							redraw = true;
 						break;
 						case SDLK_S:
 							if (current_base_name && image_surface) {
 								save_selections(&selection_state, image_surface, current_base_name, &image_list.total_cropped);
 								clear_selections(&selection_state);
+								redraw = true;
 							}
 						break;
 						case SDLK_E:
@@ -291,6 +299,7 @@ int main(int argc, char* argv[]) {
 							if(selection_state.selected_index >= 0) {
 								Selection* sel = &selection_state.selections[selection_state.selected_index];
 								sel->rotation = (sel->rotation + 1 + (2 * (event.key.key == SDLK_Q))) % 4; // Rotate left
+								redraw = true;
 							}
 						break;
 						case SDLK_N:
@@ -321,11 +330,13 @@ int main(int argc, char* argv[]) {
 								}
 								SDL_SetCursor(default_cursor);
 							}
+							redraw = true;
 						break;
 					}
 					break;
 
 				case SDL_EVENT_WINDOW_RESIZED:
+					redraw = true;
 					break;
 
 				case SDL_EVENT_MOUSE_BUTTON_DOWN:
@@ -345,6 +356,7 @@ int main(int argc, char* argv[]) {
 							selection_state.current_selection = -1;
 							selection_state.selected_index = -1;
 						}
+						redraw = true;
 					} else if (event.button.button == SDL_BUTTON_RIGHT) {
 						// Right click to select a selection for rotation
 						float scale;
@@ -358,6 +370,7 @@ int main(int argc, char* argv[]) {
 						if (selected >= 0) {
 							printf("Selected area %d for rotation (use Q/E keys)\n", selected + 1);
 						}
+						redraw = true;
 					}
 					break;
 
@@ -397,6 +410,7 @@ int main(int argc, char* argv[]) {
 						}
 						
 						selection_state.current_selection = -1;
+						redraw = true;
 					}
 					break;
 
@@ -404,74 +418,81 @@ int main(int argc, char* argv[]) {
 					break;
 			}
 		}
+		if(redraw || selection_state.is_dragging) {
+			// Clear screen
+			SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);
+			SDL_RenderClear(renderer);
 
-		// Clear screen
-		SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);
-		SDL_RenderClear(renderer);
+			if (texture) {
+				// Draw texture
+				float scale;
+				SDL_FRect tex_dst = get_texture_rect(window, tex_width, tex_height, &scale);
+				SDL_RenderTexture(renderer, texture, NULL, &tex_dst);
 
-		if (texture) {
-			// Draw texture
-			float scale;
-			SDL_FRect tex_dst = get_texture_rect(window, tex_width, tex_height, &scale);
-			SDL_RenderTexture(renderer, texture, NULL, &tex_dst);
-
-			// Draw all completed selections
-			for (int i = 0; i < selection_state.count; i++) {
-				if (selection_state.selections[i].active) {
-					SDL_FRect* tex_rect = &selection_state.selections[i].texture_rect;
-					SDL_FRect screen_rect;
-					screen_rect.x = tex_dst.x + tex_rect->x * scale;
-					screen_rect.y = tex_dst.y + tex_rect->y * scale;
-					screen_rect.w = tex_rect->w * scale;
-					screen_rect.h = tex_rect->h * scale;
-					
-					// Highlight selected selection
-					if (i == selection_state.selected_index) {
-						SDL_SetRenderDrawColor(renderer, 0, 255, 0, 60);
-						SDL_RenderFillRect(renderer, &screen_rect);
-						SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
-						// Draw thicker border for selected
-						for (int j = 0; j < 3; j++) {
-							SDL_FRect thick_rect = {screen_rect.x - j, screen_rect.y - j, 
-												  screen_rect.w + 2*j, screen_rect.h + 2*j};
-							SDL_RenderRect(renderer, &thick_rect);
+				// Draw all completed selections
+				for (int i = 0; i < selection_state.count; i++) {
+					if (selection_state.selections[i].active) {
+						SDL_FRect* tex_rect = &selection_state.selections[i].texture_rect;
+						SDL_FRect screen_rect;
+						screen_rect.x = tex_dst.x + tex_rect->x * scale;
+						screen_rect.y = tex_dst.y + tex_rect->y * scale;
+						screen_rect.w = tex_rect->w * scale;
+						screen_rect.h = tex_rect->h * scale;
+						
+						// Highlight selected selection
+						if (i == selection_state.selected_index) {
+							SDL_SetRenderDrawColor(renderer, 0, 255, 0, 60);
+							SDL_RenderFillRect(renderer, &screen_rect);
+							SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
+							// Draw thicker border for selected
+							for (int j = 0; j < 3; j++) {
+								SDL_FRect thick_rect = {screen_rect.x - j, screen_rect.y - j, 
+													  screen_rect.w + 2*j, screen_rect.h + 2*j};
+								SDL_RenderRect(renderer, &thick_rect);
+							}
+						} else {
+							SDL_SetRenderDrawColor(renderer, 0, 255, 0, 30);
+							SDL_RenderFillRect(renderer, &screen_rect);
+							SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
+							SDL_RenderRect(renderer, &screen_rect);
 						}
-					} else {
-						SDL_SetRenderDrawColor(renderer, 0, 255, 0, 30);
-						SDL_RenderFillRect(renderer, &screen_rect);
-						SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
-						SDL_RenderRect(renderer, &screen_rect);
+						
+						// Draw rotation icon
+						draw_rotation_icon(renderer, &screen_rect, selection_state.selections[i].rotation);
 					}
+				}
+
+				// Draw current selection being dragged
+				if (selection_state.is_dragging) {
+					float mouse_x, mouse_y;
+					SDL_GetMouseState(&mouse_x, &mouse_y);
 					
-					// Draw rotation icon
-					draw_rotation_icon(renderer, &screen_rect, selection_state.selections[i].rotation);
+					SDL_FRect current_rect;
+					current_rect.x = fminf(selection_state.drag_start.x, mouse_x);
+					current_rect.y = fminf(selection_state.drag_start.y, mouse_y);
+					current_rect.w = fabsf(mouse_x - selection_state.drag_start.x);
+					current_rect.h = fabsf(mouse_y - selection_state.drag_start.y);
+					
+					current_rect.x = fmaxf(current_rect.x, tex_dst.x);
+					current_rect.y = fmaxf(current_rect.y, tex_dst.y);
+					current_rect.w = fminf(current_rect.w, tex_dst.x + tex_dst.w - current_rect.x);
+					current_rect.h = fminf(current_rect.h, tex_dst.y + tex_dst.h - current_rect.y);
+					
+					SDL_SetRenderDrawColor(renderer, 0, 255, 0, 30);
+					SDL_RenderFillRect(renderer, &current_rect);
+					SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
+					SDL_RenderRect(renderer, &current_rect);
 				}
 			}
 
-			// Draw current selection being dragged
-			if (selection_state.is_dragging) {
-				float mouse_x, mouse_y;
-				SDL_GetMouseState(&mouse_x, &mouse_y);
-				
-				SDL_FRect current_rect;
-				current_rect.x = fminf(selection_state.drag_start.x, mouse_x);
-				current_rect.y = fminf(selection_state.drag_start.y, mouse_y);
-				current_rect.w = fabsf(mouse_x - selection_state.drag_start.x);
-				current_rect.h = fabsf(mouse_y - selection_state.drag_start.y);
-				
-				current_rect.x = fmaxf(current_rect.x, tex_dst.x);
-				current_rect.y = fmaxf(current_rect.y, tex_dst.y);
-				current_rect.w = fminf(current_rect.w, tex_dst.x + tex_dst.w - current_rect.x);
-				current_rect.h = fminf(current_rect.h, tex_dst.y + tex_dst.h - current_rect.y);
-				
-				SDL_SetRenderDrawColor(renderer, 0, 255, 0, 30);
-				SDL_RenderFillRect(renderer, &current_rect);
-				SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
-				SDL_RenderRect(renderer, &current_rect);
-			}
+			SDL_RenderPresent(renderer);
 		}
 
-		SDL_RenderPresent(renderer);
+		Uint32 frameTime = SDL_GetTicks() - frameStart; // Framerate limit
+		if (frameTime < frameDelay) {
+			SDL_Delay(frameDelay - frameTime);
+		}
+		redraw = false;
 	}
 
 	// Cleanup

@@ -250,10 +250,11 @@ int main(int argc, char* argv[]) {
 					break;
 
 				case SDL_EVENT_MOUSE_MOTION:
+					if(selection_state.is_dragging) redraw = true;
 					break;
 			}
 		}
-		if(redraw || selection_state.is_dragging) {
+		if(redraw) {
 			// Clear screen
 			SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);
 			SDL_RenderClear(renderer);

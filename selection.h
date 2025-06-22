@@ -24,12 +24,12 @@ typedef struct {
 	int capacity;
 	bool is_dragging;
 	SDL_FPoint drag_start;
-	int current_selection;
 	int selected_index; // Currently selected selection for rotation
 } SelectionState;
 
 void init_selection_state(SelectionState* state);
 void add_selection(SelectionState* state, SDL_FRect texture_rect);
+void delete_selection(SelectionState* state, int index);
 void clear_selections(SelectionState* state);
 void free_selection_state(SelectionState* state);
 int find_selection_at_point(SelectionState* state, float x, float y, float tex_display_x, float tex_display_y, float scale);

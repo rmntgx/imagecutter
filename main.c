@@ -95,6 +95,7 @@ int main(int argc, char* argv[]) {
 - 'Q'/'E' keys to rotate selected area left/right\n\
 - 'S' key to save all selections\n\
 - 'C' key to clear all selections\n\
+- 'D' for delete selection\n\
 - 'N' key for next image\n\
 - 'P' key for previous image\n\
 - 'ESC' to quit\n\n");
@@ -120,6 +121,11 @@ int main(int argc, char* argv[]) {
 						case SDLK_C:
 							clear_selections(&selection_state);
 							printf("All selections cleared.\n");
+							redraw = true;
+						break;
+						case SDLK_D:
+							if(selection_state.selected_index >= 0)
+								delete_selection(&selection_state, selection_state.selected_index);
 							redraw = true;
 						break;
 						case SDLK_S:
@@ -188,7 +194,6 @@ int main(int argc, char* argv[]) {
 							selection_state.is_dragging = true;
 							selection_state.drag_start.x = mouse_x;
 							selection_state.drag_start.y = mouse_y;
-							selection_state.current_selection = -1;
 							selection_state.selected_index = -1;
 						}
 						redraw = true;
@@ -244,7 +249,6 @@ int main(int argc, char* argv[]) {
 								   texture_rect.w, texture_rect.h);
 						}
 						
-						selection_state.current_selection = -1;
 						redraw = true;
 					}
 					break;

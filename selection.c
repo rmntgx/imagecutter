@@ -5,7 +5,6 @@ void init_selection_state(SelectionState* state) {
 	state->selections = malloc(sizeof(Selection) * state->capacity);
 	state->count = 0;
 	state->is_dragging = false;
-	state->current_selection = -1;
 	state->selected_index = -1;
 }
 
@@ -21,10 +20,18 @@ void add_selection(SelectionState* state, SDL_FRect texture_rect) {
 	state->count++;
 }
 
+void delete_selection(SelectionState* state, int index) {
+	for(int i = index; i < state->count - 1; i++) {
+		state->selections[i] = state->selections[i + 1];
+	}
+	state->count--;
+	if(state->selected_index == index) state->selected_index = -1;
+	if(state->selected_index > index) state->selected_index--;
+}
+
 void clear_selections(SelectionState* state) {
 	state->count = 0;
 	state->is_dragging = false;
-	state->current_selection = -1;
 	state->selected_index = -1;
 }
 

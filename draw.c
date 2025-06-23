@@ -7,13 +7,11 @@ void draw_rotation_icon(SDL_Renderer* renderer, SDL_FRect* rect, Rotation rotati
 	if (size < 10) size = 10;
 	if (size > 30) size = 30;
 
-	// Цвет стрелки (черный с прозрачностью)
 	SDL_FColor color = { 0, 0, 0, 0.5 };
 
-	// Определим вершины треугольника-стрелки в зависимости от поворота
 	SDL_Vertex verts[3];
 	switch (rotation) {
-		case ROTATION_0: // вверх
+		case ROTATION_0:
 			verts[0].position.x = center_x;
 			verts[0].position.y = center_y - size;
 
@@ -24,7 +22,7 @@ void draw_rotation_icon(SDL_Renderer* renderer, SDL_FRect* rect, Rotation rotati
 			verts[2].position.y = center_y + size * 0.6f;
 			break;
 
-		case ROTATION_90: // вправо
+		case ROTATION_90:
 			verts[0].position.x = center_x + size;
 			verts[0].position.y = center_y;
 
@@ -35,7 +33,7 @@ void draw_rotation_icon(SDL_Renderer* renderer, SDL_FRect* rect, Rotation rotati
 			verts[2].position.y = center_y + size * 0.6f;
 			break;
 
-		case ROTATION_180: // вниз
+		case ROTATION_180:
 			verts[0].position.x = center_x;
 			verts[0].position.y = center_y + size;
 
@@ -46,7 +44,7 @@ void draw_rotation_icon(SDL_Renderer* renderer, SDL_FRect* rect, Rotation rotati
 			verts[2].position.y = center_y - size * 0.6f;
 			break;
 
-		case ROTATION_270: // влево
+		case ROTATION_270:
 			verts[0].position.x = center_x - size;
 			verts[0].position.y = center_y;
 
@@ -60,7 +58,7 @@ void draw_rotation_icon(SDL_Renderer* renderer, SDL_FRect* rect, Rotation rotati
 
 	for (int i = 0; i < 3; ++i) {
 		verts[i].color = color;
-		verts[i].tex_coord = (SDL_FPoint){0, 0}; // Без текстуры
+		verts[i].tex_coord = (SDL_FPoint){0, 0};
 	}
 
 	int indices[3] = { 0, 1, 2 };

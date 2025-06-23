@@ -1,9 +1,4 @@
 #include <SDL3/SDL.h>
-#include <SDL3/SDL_keycode.h>
-#include <SDL3/SDL_mouse.h>
-#include <SDL3/SDL_rect.h>
-#include <SDL3/SDL_render.h>
-#include <SDL3/SDL_stdinc.h>
 #include <SDL3_image/SDL_image.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -88,6 +83,8 @@ int main(int argc, char* argv[]) {
 	SelectionState selection_state;
 	init_selection_state(&selection_state);
 
+	SDL_Cursor* resize_cursor = NULL;
+
 	bool running = true;
 	printf("Controls:\n\
 - Left click and drag to create selection\n\
@@ -95,7 +92,7 @@ int main(int argc, char* argv[]) {
 - 'Q'/'E' keys to rotate selected area left/right\n\
 - 'S' key to save all selections\n\
 - 'C' key to clear all selections\n\
-- 'D' for delete selection\n\
+- 'D'/'Delete' for delete selection\n\
 - 'N' key for next image\n\
 - 'P' key for previous image\n\
 - 'ESC' to quit\n\n");
@@ -124,6 +121,7 @@ int main(int argc, char* argv[]) {
 							redraw = true;
 						break;
 						case SDLK_D:
+						case SDLK_DELETE:
 							if(selection_state.selected_index >= 0)
 								delete_selection(&selection_state, selection_state.selected_index);
 							redraw = true;
@@ -182,79 +180,78 @@ int main(int argc, char* argv[]) {
 
 				case SDL_EVENT_MOUSE_BUTTON_DOWN:
 					if (event.button.button == SDL_BUTTON_LEFT) {
-						// Get window size
-						float scale;
-						SDL_FRect tex_display = get_texture_rect(window, tex_width, tex_height, &scale);
-
 						float mouse_x = event.button.x;
 						float mouse_y = event.button.y;
-						
-						if (mouse_x >= tex_display.x && mouse_x <= tex_display.x + tex_display.w &&
-							mouse_y >= tex_display.y && mouse_y <= tex_display.y + tex_display.h) {
-							selection_state.is_dragging = true;
+
+						if(selection_state.selected_index >= 0 && selection_state.resize_corner >= 0) {
+							selection_state.is_resizing = true;
 							selection_state.drag_start.x = mouse_x;
 							selection_state.drag_start.y = mouse_y;
-							selection_state.selected_index = -1;
+							selection_state.before_resize = selection_state.selections[selection_state.selected_index].texture_rect;
+						} else {
+							SDL_FPoint mouse_norm = get_normalized_mouse(window, tex_width, tex_height, mouse_x, mouse_y, NULL);
+							int selection_under = find_selection_at_point(&selection_state, mouse_norm);
+							if(selection_under >= 0) {
+								selection_state.is_resizing = true;
+								selection_state.drag_start.x = mouse_norm.x;
+								selection_state.drag_start.y = mouse_norm.y;
+								selection_state.before_resize = selection_state.selections[selection_state.selected_index].texture_rect;
+								selection_state.resize_corner = 0b10000;
+							} else {
+								float scale;
+								SDL_FRect tex_display = get_texture_rect(window, tex_width, tex_height, &scale);
+								
+								if (mouse_x >= tex_display.x && mouse_x <= tex_display.x + tex_display.w &&
+									mouse_y >= tex_display.y && mouse_y <= tex_display.y + tex_display.h) {
+									selection_state.is_dragging = true;
+									selection_state.drag_start.x = mouse_x;
+									selection_state.drag_start.y = mouse_y;
+									selection_state.selected_index = -1;
+								}
+							}
 						}
 						redraw = true;
 					} else if (event.button.button == SDL_BUTTON_RIGHT) {
-						// Right click to select a selection for rotation
-						float scale;
-						SDL_FRect tex_display = get_texture_rect(window, tex_width, tex_height, &scale);
-						float mouse_x = event.button.x;
-						float mouse_y = event.button.y;
-						
-						int selected = find_selection_at_point(&selection_state, mouse_x, mouse_y, 
-															 tex_display.x, tex_display.y, scale);
-						selection_state.selected_index = selected;
-						if (selected >= 0) {
+						// Right click to select a selection
+						SDL_FPoint mouse_norm = get_normalized_mouse(window, tex_width, tex_height, event.button.x, event.button.y, NULL);
+						int selected = find_selection_at_point(&selection_state, mouse_norm);
+						if (selected >= 0 && selection_state.selected_index != selected) {
 							printf("Selected area %d for rotation (use Q/E keys)\n", selected + 1);
 						}
+						selection_state.selected_index = selected;
 						redraw = true;
 					}
 					break;
 
 				case SDL_EVENT_MOUSE_BUTTON_UP:
+					if (event.button.button == SDL_BUTTON_LEFT && selection_state.is_resizing) {
+						stop_resizing(&selection_state);
+						redraw = true;
+					}
 					if (event.button.button == SDL_BUTTON_LEFT && selection_state.is_dragging) {
-						selection_state.is_dragging = false;
-						
 						float scale;
 						SDL_FRect tex_display = get_texture_rect(window, tex_width, tex_height, &scale);
-						
-						float mouse_x = event.button.x;
-						float mouse_y = event.button.y;
-						
-						SDL_FRect screen_rect;
-						screen_rect.x = fminf(selection_state.drag_start.x, mouse_x);
-						screen_rect.y = fminf(selection_state.drag_start.y, mouse_y);
-						screen_rect.w = fabsf(mouse_x - selection_state.drag_start.x);
-						screen_rect.h = fabsf(mouse_y - selection_state.drag_start.y);
-						
-						screen_rect.x = fmaxf(screen_rect.x, tex_display.x);
-						screen_rect.y = fmaxf(screen_rect.y, tex_display.y);
-						screen_rect.w = fminf(screen_rect.w, tex_display.x + tex_display.w - screen_rect.x);
-						screen_rect.h = fminf(screen_rect.h, tex_display.y + tex_display.h - screen_rect.y);
-						
-						if (screen_rect.w > 5 && screen_rect.h > 5) {
-							SDL_FRect texture_rect;
-							texture_rect.x = (screen_rect.x - tex_display.x) / scale;
-							texture_rect.y = (screen_rect.y - tex_display.y) / scale;
-							texture_rect.w = screen_rect.w / scale;
-							texture_rect.h = screen_rect.h / scale;
-							
-							add_selection(&selection_state, texture_rect);
-							
-							printf("Selection %d created at (%.1f, %.1f) size %.1fx%.1f\n", 
-								   selection_state.count, texture_rect.x, texture_rect.y, 
-								   texture_rect.w, texture_rect.h);
-						}
-						
+						stop_dragging(&selection_state, event.button.x, event.button.y, tex_display, scale);
 						redraw = true;
 					}
 					break;
 
 				case SDL_EVENT_MOUSE_MOTION:
-					if(selection_state.is_dragging) redraw = true;
+					if(selection_state.is_resizing) {
+						SDL_FPoint norm_mouse = get_normalized_mouse(window, tex_width, tex_height, event.motion.x, event.motion.y, NULL);
+						update_resizable(&selection_state, norm_mouse);
+						redraw = true;
+					} else {
+						if(selection_state.is_dragging) {
+							redraw = true;
+						} else {
+							float scale;
+							SDL_FPoint mouse_norm = get_normalized_mouse(window, tex_width, tex_height, event.motion.x, event.motion.y, &scale);
+							int corner;
+							bool is_mouse_on_move_point = find_move_point(&selection_state, mouse_norm, scale, &corner);
+							change_resizing_cursor(&selection_state, is_mouse_on_move_point, corner, resize_cursor, default_cursor);
+						}
+					}
 					break;
 			}
 		}
@@ -286,18 +283,18 @@ int main(int argc, char* argv[]) {
 							SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
 							// Draw thicker border for selected
 							for (int j = 0; j < 3; j++) {
-								SDL_FRect thick_rect = {screen_rect.x - j, screen_rect.y - j, 
-													  screen_rect.w + 2*j, screen_rect.h + 2*j};
+								SDL_FRect thick_rect = { screen_rect.x - j, screen_rect.y - j, 
+														 screen_rect.w + 2 * j, screen_rect.h + 2 * j };
 								SDL_RenderRect(renderer, &thick_rect);
 							}
 						} else {
+							// Drawing a regular selection
 							SDL_SetRenderDrawColor(renderer, 0, 255, 0, 30);
 							SDL_RenderFillRect(renderer, &screen_rect);
 							SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
 							SDL_RenderRect(renderer, &screen_rect);
 						}
 						
-						// Draw rotation icon
 						draw_rotation_icon(renderer, &screen_rect, selection_state.selections[i].rotation);
 					}
 				}
@@ -306,17 +303,14 @@ int main(int argc, char* argv[]) {
 				if (selection_state.is_dragging) {
 					float mouse_x, mouse_y;
 					SDL_GetMouseState(&mouse_x, &mouse_y);
-					
+					mouse_x = fminf(fmaxf(mouse_x, tex_dst.x), tex_dst.x + tex_dst.w);
+					mouse_y = fminf(fmaxf(mouse_y, tex_dst.y), tex_dst.y + tex_dst.h);
+
 					SDL_FRect current_rect;
 					current_rect.x = fminf(selection_state.drag_start.x, mouse_x);
 					current_rect.y = fminf(selection_state.drag_start.y, mouse_y);
 					current_rect.w = fabsf(mouse_x - selection_state.drag_start.x);
 					current_rect.h = fabsf(mouse_y - selection_state.drag_start.y);
-					
-					current_rect.x = fmaxf(current_rect.x, tex_dst.x);
-					current_rect.y = fmaxf(current_rect.y, tex_dst.y);
-					current_rect.w = fminf(current_rect.w, tex_dst.x + tex_dst.w - current_rect.x);
-					current_rect.h = fminf(current_rect.h, tex_dst.y + tex_dst.h - current_rect.y);
 					
 					SDL_SetRenderDrawColor(renderer, 0, 255, 0, 30);
 					SDL_RenderFillRect(renderer, &current_rect);
@@ -337,6 +331,7 @@ int main(int argc, char* argv[]) {
 
 	// Cleanup
 	SDL_DestroyCursor(loading_cursor);
+	if(resize_cursor != NULL) SDL_DestroyCursor(resize_cursor);
 	SDL_DestroyCursor(default_cursor);
 	free_selection_state(&selection_state);
 	if (texture) SDL_DestroyTexture(texture);

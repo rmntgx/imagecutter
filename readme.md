@@ -27,7 +27,7 @@
 - 'Q'/'E' keys to rotate selected area left/right
 - 'S' key to save all selections
 - 'C' key to clear all selections
-- 'D' for delete selection
+- 'D'/'Delete' for delete selection
 - 'N' key for next image
 - 'P' key for previous image
 - 'ESC' to quit

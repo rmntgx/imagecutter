@@ -5,6 +5,8 @@ void init_selection_state(SelectionState* state) {
 	state->selections = malloc(sizeof(Selection) * state->capacity);
 	state->count = 0;
 	state->is_dragging = false;
+	state->is_resizing = false;
+	state->resize_corner = -1;
 	state->selected_index = -1;
 }
 
@@ -39,21 +41,90 @@ void free_selection_state(SelectionState* state) {
 	free(state->selections);
 }
 
-int find_selection_at_point(SelectionState* state, float x, float y, float tex_display_x, float tex_display_y, float scale) {
-	for (int i = state->count - 1; i >= 0; i--) {
-		if (!state->selections[i].active) continue;
+int find_selection_at_point(SelectionState* state, SDL_FPoint mouse) {
+    for (int i = state->count - 1; i >= 0; i--) {
+        if (!state->selections[i].active) continue;
 
-		SDL_FRect* tex_rect = &state->selections[i].texture_rect;
-		SDL_FRect screen_rect;
-		screen_rect.x = tex_display_x + tex_rect->x * scale;
-		screen_rect.y = tex_display_y + tex_rect->y * scale;
-		screen_rect.w = tex_rect->w * scale;
-		screen_rect.h = tex_rect->h * scale;
+        const SDL_FRect* rect = &state->selections[i].texture_rect;
+        if (mouse.x >= rect->x && mouse.x <= rect->x + rect->w &&
+            mouse.y >= rect->y && mouse.y <= rect->y + rect->h) {
+            return i;
+        }
+    }
+    return -1;
+}
 
-		if (x >= screen_rect.x && x <= screen_rect.x + screen_rect.w &&
-			y >= screen_rect.y && y <= screen_rect.y + screen_rect.h) {
-			return i;
-		}
+bool find_move_point(SelectionState* state, SDL_FPoint mouse, float scale, int* corner) {
+	if(state->selected_index < 0) return false;
+
+	const float dist = (10 / scale);
+	const SDL_FRect* rect = &state->selections[state->selected_index].texture_rect;
+	*corner = fabsf(mouse.x - rect->x) < dist;
+	*corner += (fabsf(mouse.x - (rect->x + rect->w)) < dist) << 1;
+	*corner += (fabsf(mouse.y - rect->y) < dist) << 2;
+	*corner += (fabsf(mouse.y - (rect->y + rect->h)) < dist) << 3;
+	
+	return (*corner & 0b0011) && (*corner & 0b1100);
+}
+
+void stop_dragging(SelectionState* state, float mouse_x, float mouse_y, SDL_FRect tex_display, float scale) {
+	state->is_dragging = false;
+
+	mouse_x = fminf(fmaxf(mouse_x, tex_display.x), tex_display.x + tex_display.w);
+	mouse_y = fminf(fmaxf(mouse_y, tex_display.y), tex_display.y + tex_display.h);
+
+	SDL_FRect screen_rect;
+	screen_rect.x = fminf(state->drag_start.x, mouse_x);
+	screen_rect.y = fminf(state->drag_start.y, mouse_y);
+	screen_rect.w = fabsf(mouse_x - state->drag_start.x);
+	screen_rect.h = fabsf(mouse_y - state->drag_start.y);
+
+	if (screen_rect.w <= 5 && screen_rect.h <= 5) {
+		return;
 	}
-	return -1;
+	SDL_FRect texture_rect;
+	texture_rect.x = (screen_rect.x - tex_display.x) / scale;
+	texture_rect.y = (screen_rect.y - tex_display.y) / scale;
+	texture_rect.w = screen_rect.w / scale;
+	texture_rect.h = screen_rect.h / scale;
+
+	add_selection(state, texture_rect);
+
+	printf("Selection %d created at (%.1f, %.1f) size %.1fx%.1f\n", 
+			state->count, texture_rect.x, texture_rect.y, 
+			texture_rect.w, texture_rect.h);
+}
+
+void stop_resizing(SelectionState* state) {
+	state->is_resizing = false;
+	SDL_FRect* resizable_rect = &state->selections[state->selected_index].texture_rect;
+	if(resizable_rect->w <= 0) {
+		resizable_rect->x += resizable_rect->w;
+		resizable_rect->w = -resizable_rect->w + (resizable_rect->w == 0);
+	}
+	if(resizable_rect->h <= 0) {
+		resizable_rect->y += resizable_rect->h;
+		resizable_rect->h = -resizable_rect->h + (resizable_rect->h == 0);
+	}
+}
+
+void update_resizable(SelectionState* state, SDL_FPoint norm_mouse) {
+	SDL_FRect* resizable_rect = &state->selections[state->selected_index].texture_rect;
+	if(state->resize_corner == 0b10000) {
+		resizable_rect->x = state->before_resize.x + (norm_mouse.x - state->drag_start.x);
+		resizable_rect->y = state->before_resize.y + (norm_mouse.y - state->drag_start.y);
+		return;
+	}
+	if(state->resize_corner & 0b0001) {
+		resizable_rect->x = norm_mouse.x;
+		resizable_rect->w = state->before_resize.w - (norm_mouse.x - state->before_resize.x);
+	} else {
+		resizable_rect->w = norm_mouse.x - resizable_rect->x;
+	}
+	if(state->resize_corner & 0b0100) {
+		resizable_rect->h = state->before_resize.h - (norm_mouse.y - state->before_resize.y);
+		resizable_rect->y = norm_mouse.y;
+	} else {
+		resizable_rect->h = norm_mouse.y - resizable_rect->y;
+	}
 }

@@ -191,7 +191,7 @@ int main(int argc, char* argv[]) {
 						} else {
 							SDL_FPoint mouse_norm = get_normalized_mouse(window, tex_width, tex_height, mouse_x, mouse_y, NULL);
 							int selection_under = find_selection_at_point(&selection_state, mouse_norm);
-							if(selection_under >= 0) {
+							if(selection_under == selection_state.selected_index && selection_under >= 0) {
 								selection_state.is_resizing = true;
 								selection_state.drag_start.x = mouse_norm.x;
 								selection_state.drag_start.y = mouse_norm.y;
